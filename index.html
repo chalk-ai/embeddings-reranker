@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docs Search Reranker</title>
+<style>
+  /* Chalk marketing palette: green-1 ground, chartreuse primary, mint accents. */
+  :root { --bg:#224A41; --panel:#1C3B34; --line:#32645B; --ink:#EFF5F3; --muted:#B9CFC7;
+          --accent:#BBD96D; --mint:#70CD96; --up:#70CD96; --down:#F8947F; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; padding:32px 16px; }
+  html.embed body { padding:24px 20px; }
+  html.embed header { display:none; }
+  .wrap { max-width:1100px; margin:0 auto; display:flex; flex-direction:column; gap:18px; }
+  .mono { font-family:ui-monospace,"SFMono-Regular",Menlo,monospace; text-transform:uppercase;
+          letter-spacing:.06em; font-size:12px; }
+  h1 { font-size:22px; font-weight:500; margin:0 0 4px; letter-spacing:-0.3px; }
+  header p { color:var(--muted); margin:0; font-size:14px; }
+  form { display:flex; gap:10px; }
+  input { flex:1; min-width:0; font:inherit; font-size:16px; color:var(--ink); background:var(--panel);
+          border:1px solid var(--line); border-radius:4px; padding:12px 14px; outline:none; }
+  input:focus { border-color:var(--mint); }
+  button { font:13px/15px ui-monospace,"SFMono-Regular",Menlo,monospace; text-transform:uppercase;
+           letter-spacing:.06em; border:1px solid var(--accent); border-radius:20px; padding:12px 22px;
+           cursor:pointer; background:var(--accent); color:var(--bg); white-space:nowrap; }
+  button:hover { background:transparent; color:var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { background:transparent; color:var(--muted); border-color:var(--line); padding:7px 12px;
+          font-size:11px; white-space:normal; text-align:left; max-width:100%; }
+  .chip:hover { color:var(--ink); border-color:var(--muted); background:transparent; }
+  #meta { color:var(--muted); min-height:18px; }
+  #meta b { color:var(--ink); font-weight:500; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:760px) { .cols { grid-template-columns:1fr; } form { flex-direction:column; } }
+  .col { background:var(--panel); border:1px solid var(--line); border-radius:4px; min-width:0; }
+  .col h2 { margin:0; padding:12px 16px; border-bottom:1px solid var(--line); color:var(--muted);
+            display:flex; justify-content:space-between; gap:8px; }
+  .col h2 span:first-child { color:var(--ink); }
+  ol { list-style:none; margin:0; padding:0; }
+  li { padding:12px 16px; border-bottom:1px solid var(--line); display:grid;
+       grid-template-columns:28px 1fr; gap:4px 10px; }
+  li:last-child { border-bottom:0; }
+  .rank { color:var(--muted); font-family:ui-monospace,Menlo,monospace; font-size:13px; padding-top:2px; }
+  .title a { color:var(--ink); text-decoration:none; font-weight:500; }
+  .title a:hover { text-decoration:underline; }
+  .title .h { color:var(--muted); font-weight:400; }
+  .snip { grid-column:2; color:var(--muted); font-size:13px; display:-webkit-box; -webkit-line-clamp:3;
+          -webkit-box-orient:vertical; overflow:hidden; }
+  .score { grid-column:2; display:flex; gap:10px; align-items:center; }
+  .bar { height:4px; border-radius:2px; background:var(--mint); opacity:.8; }
+  .move { font-family:ui-monospace,Menlo,monospace; font-size:11px; padding:1px 6px; border-radius:10px;
+          border:1px solid currentColor; }
+  .move.up { color:var(--up); } .move.down { color:var(--down); } .move.same { color:var(--muted); }
+  .empty { padding:28px 16px; color:var(--muted); text-align:center; }
+</style>
+<script>
+  if (new URLSearchParams(location.search).has("embed")) document.documentElement.classList.add("embed");
+</script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Search the Chalk docs, then rerank</h1>
+    <p>Embedding retrieval finds 50 candidates in milliseconds. A cross-encoder on two L4 GPUs reads each one against your question and reorders them.</p>
+  </header>
+  <form id="f">
+    <input id="q" autocomplete="off" maxlength="500" placeholder="Ask the docs anything, e.g. how do I backfill a feature?">
+    <button id="go" type="submit">Search</button>
+  </form>
+  <div class="chips" id="chips"></div>
+  <div id="meta" class="mono"></div>
+  <div class="cols">
+    <section class="col">
+      <h2 class="mono"><span>1 · Embedding search</span><span>cosine similarity</span></h2>
+      <ol id="emb"><li class="empty" style="display:block">Results appear here.</li></ol>
+    </section>
+    <section class="col">
+      <h2 class="mono"><span>2 · Reranked</span><span>cross-encoder score</span></h2>
+      <ol id="rr"><li class="empty" style="display:block">…and the reranked order here.</li></ol>
+    </section>
+  </div>
+</div>
+<script>
+const EXAMPLES = [
+  "how do I backfill a feature after changing a resolver",
+  "count failed logins in the last 10 minutes",
+  "connect Chalk to Snowflake",
+  "what happens when an online query times out",
+  "run a resolver on a schedule",
+  "test features locally before deploying",
+];
+const $ = (id) => document.getElementById(id);
+const chips = $("chips");
+for (const ex of EXAMPLES) {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "chip"; b.textContent = ex;
+  b.onclick = () => { $("q").value = ex; run(); };
+  chips.appendChild(b);
+}
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function renderList(target, hits, kind) {
+  target.replaceChildren();
+  if (!hits.length) { const li = el("li", "empty", "No results."); li.style.display = "block"; target.appendChild(li); return; }
+  const max = Math.max(...hits.map((h) => kind === "rr" ? h.score : h.similarity), 1e-6);
+  for (const h of hits) {
+    const li = el("li");
+    li.appendChild(el("div", "rank", String(h.rank)));
+    const title = el("div", "title");
+    const a = el("a", null, h.title);
+    a.href = h.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+    title.appendChild(a);
+    if (h.heading) title.appendChild(el("span", "h", " · " + h.heading));
+    li.appendChild(title);
+    li.appendChild(el("div", "snip", h.snippet));
+    const score = el("div", "score mono");
+    const value = kind === "rr" ? h.score : h.similarity;
+    const bar = el("div", "bar"); bar.style.width = Math.max(4, (value / max) * 120) + "px";
+    score.appendChild(bar);
+    score.appendChild(el("span", null, value.toFixed(3)));
+    if (kind === "rr") {
+      const d = h.embedding_rank - h.rank;
+      const m = el("span", "move " + (d > 0 ? "up" : d < 0 ? "down" : "same"),
+                   d > 0 ? `▲ ${d} from #${h.embedding_rank}` : d < 0 ? `▼ ${-d} from #${h.embedding_rank}` : "same");
+      score.appendChild(m);
+    }
+    li.appendChild(score);
+    target.appendChild(li);
+  }
+}
+
+async function run() {
+  const query = $("q").value.trim();
+  if (!query) return;
+  $("go").disabled = true;
+  $("meta").textContent = "Searching…";
+  try {
+    const r = await fetch("api/search", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query, candidates: 50, top: 10 }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const res = await r.json();
+    renderList($("emb"), res.embedding, "emb");
+    renderList($("rr"), res.reranked, "rr");
+    const t = res.timings_ms;
+    $("meta").innerHTML = "";
+    $("meta").append(
+      `${res.corpus_chunks} chunks · embed query `, el("b", null, `${t.embed_query} ms`),
+      ` · vector search `, el("b", null, `${t.vector_search} ms`),
+      ` · rerank ${res.candidates} `, el("b", null, `${t.rerank} ms`),
+      ` · total `, el("b", null, `${t.total} ms`));
+  } catch (e) {
+    $("meta").textContent = "Search failed: " + e.message;
+  } finally {
+    $("go").disabled = false;
+  }
+}
+$("f").onsubmit = (e) => { e.preventDefault(); run(); };
+
+// Embedded in another page: report our height so the parent can size the iframe to fit.
+if (document.documentElement.classList.contains("embed") && window.parent !== window) {
+  const report = () => window.parent.postMessage(
+    { type: "chalk-demo-height", height: Math.ceil(document.body.getBoundingClientRect().height) }, "*");
+  new ResizeObserver(report).observe(document.body);
+  report();
+}
+</script>
+</body>
+</html>
