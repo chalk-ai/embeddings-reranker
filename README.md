@@ -34,8 +34,7 @@ replicas, or set `max_replicas` above `min_replicas`, to scale it out.
 ## Run it
 
 You need [`uv`](https://docs.astral.sh/uv/) and a Chalk environment that can schedule L4 GPUs.
-Credentials come from the SDK’s ambient credentials from `chalk login`, or from `CHALK_API_SERVER`,
-`CHALK_CLIENT_ID`, `CHALK_CLIENT_SECRET` and `CHALK_ENVIRONMENT_ID`.
+Credentials come from your existing `chalk login`.
 
 ```bash
 ./deploy.py
