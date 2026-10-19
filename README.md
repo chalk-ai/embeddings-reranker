@@ -34,7 +34,7 @@ replicas, or set `max_replicas` above `min_replicas`, to scale it out.
 ## Run it
 
 You need [`uv`](https://docs.astral.sh/uv/) and a Chalk environment that can schedule L4 GPUs.
-Credentials come from `chalk config` in the current directory, or from `CHALK_API_SERVER`,
+Credentials come from the SDK’s ambient credentials from `chalk login`, or from `CHALK_API_SERVER`,
 `CHALK_CLIENT_ID`, `CHALK_CLIENT_SECRET` and `CHALK_ENVIRONMENT_ID`.
 
 ```bash
@@ -71,3 +71,10 @@ re-reads from `CHALK_WEB_IDENTITY_TOKEN_FILE` on every request because the token
 ## License
 
 Apache-2.0. Both models are Apache-2.0, released by Alibaba-NLP.
+
+## Local authentication
+
+The SDK reads credentials, API host, and the selected environment from your existing
+`chalk login` in `~/.chalk.yml`, including project-scoped and default logins.
+For unattended runs, `CHALK_CLIENT_ID` and `CHALK_CLIENT_SECRET` remain supported. Where available, `--env-id`
+overrides the target environment; otherwise the SDK uses your login or environment settings.

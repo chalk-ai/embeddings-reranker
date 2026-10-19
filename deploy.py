@@ -15,16 +15,14 @@ Three Chalk ScalingGroups:
 
 The two model groups are authenticated; the app reaches them with its own workload identity.
 
-Credentials come from `chalk config` in the current directory (or the CHALK_* env vars):
+Credentials come from your existing `chalk login` (or the CHALK_* env vars):
     ./deploy.py [--env-id <environment>] [--prefix docs-search]
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import os
-import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -42,17 +40,6 @@ EMBEDDER_REVISION = "e7f32e3c00f91d699e8c43b53106206bcc72bb22"
 RERANKER_MODEL = "Alibaba-NLP/gte-reranker-modernbert-base"
 RERANKER_REVISION = "f7481e6055501a30fb19d090657df9ec1f79ab2c"
 DOCS_TARBALL = "https://codeload.github.com/chalk-ai/docs/tar.gz/b6a3a3c5c0dfad31f454a601483a422bc903fba7"
-
-
-def load_chalk_env(env_id: str | None) -> None:
-    if "CHALK_CLIENT_ID" not in os.environ:
-        cfg = json.loads(subprocess.check_output(["chalk", "config", "--json"]))
-        os.environ["CHALK_API_SERVER"] = cfg["apiServer"]["value"]
-        os.environ["CHALK_CLIENT_ID"] = cfg["clientId"]["value"]
-        os.environ["CHALK_CLIENT_SECRET"] = cfg["clientSecret"]["value"]
-        os.environ.setdefault("CHALK_ENVIRONMENT_ID", cfg["environment"]["value"])
-    if env_id:
-        os.environ["CHALK_ENVIRONMENT_ID"] = env_id
 
 
 def tei_group(name: str, model: str, revision: str, gpu: str, replicas: int) -> ScalingGroup:
@@ -105,7 +92,8 @@ def main() -> None:
     parser.add_argument("--ready-timeout", type=float, default=1800.0)
     args = parser.parse_args()
 
-    load_chalk_env(args.env_id)
+    if args.env_id:
+        os.environ["CHALK_ENVIRONMENT"] = args.env_id
     from chalkcompute import Image, ReadinessProbe, ScalingGroup
 
     embedder = tei_group(f"{args.prefix}-embedder", EMBEDDER_MODEL, EMBEDDER_REVISION, args.gpu, 1)
