@@ -38,7 +38,7 @@ Credentials come from the SDK’s ambient credentials from `chalk login`, or fro
 `CHALK_CLIENT_ID`, `CHALK_CLIENT_SECRET` and `CHALK_ENVIRONMENT_ID`.
 
 ```bash
-./deploy.py                       # --prefix docs-search, --reranker-gpus 2
+./deploy.py
 ./search.py https://<web_url> "how do I backfill a feature"
 ./search.py https://<web_url> --bench --concurrency 16 --requests 200
 ```
@@ -76,5 +76,5 @@ Apache-2.0. Both models are Apache-2.0, released by Alibaba-NLP.
 
 The SDK reads credentials, API host, and the selected environment from your existing
 `chalk login` in `~/.chalk.yml`, including project-scoped and default logins.
-For unattended runs, `CHALK_CLIENT_ID` and `CHALK_CLIENT_SECRET` remain supported. Where available, `--env-id`
-overrides the target environment; otherwise the SDK uses your login or environment settings.
+For unattended runs, `CHALK_CLIENT_ID` and `CHALK_CLIENT_SECRET` remain supported.
+The examples use the current environment selected by your Chalk login.
